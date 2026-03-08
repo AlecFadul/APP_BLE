@@ -66,11 +66,12 @@ Se o projeto apresentar incompatibilidade em outra máquina, tente usar a mesma 
 ## Como baixar e rodar o projeto
 
 ### 1. Clonar o repositório
-```bash
+
 git clone https://github.com/AlecFadul/APP_BLE.git
-2. Entrar na pasta do projeto
+
+### 2. Entrar na pasta do projeto
 cd APP_BLE
-3. Instalar as dependências
+### 3. Instalar as dependências
 npm install
 
 Esse comando vai:
@@ -85,7 +86,7 @@ criar automaticamente a pasta node_modules
 
 Como iniciar o projeto
 
-Depois da instalação, execute:
+## Depois da instalação, execute:
 
 npx expo start
 
