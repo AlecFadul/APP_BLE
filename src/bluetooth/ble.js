@@ -1,30 +1,50 @@
 import { useEffect, useState } from "react";
 import { Platform } from "react-native";
 import { BleManager } from "react-native-ble-plx";
-import { requestMultiple, PERMISSIONS, RESULTS } from "react-native-permissions";
+import {
+  requestMultiple,
+  PERMISSIONS,
+  RESULTS,
+} from "react-native-permissions";
 import { Buffer } from "buffer";
 import { fromByteArray } from "base64-js";
 
 const manager = new BleManager();
 
-// UUIDs completos
-const serviceUUID = "0000181c-0000-1000-8000-00805f9b34fb"; // 181C
-const characteristicUUID = "00002c08-0000-1000-8000-00805f9b34fb"; // 2C08
 
-const writeUUID = "00001815-0000-1000-8000-00805f9b34fb"; // 1815
-const characteristicwriteUUID = "00001525-1212-efde-1523-785feabcd123";
+const serviceUUID = "00000000-0001-11e1-9ab4-0002a5d5c51b";
+const characteristicUUID = "001d0000-0001-11e1-ac36-0002a5d5c51b";
 
-// helper para montar base64
-const toB64 = (n) => fromByteArray(Uint8Array.from([n & 0xff]));
+
+const writeUUID = "00000000-000f-11e1-9ab4-0002a5d5c51b";
+const characteristicwriteUUID = "00000002-000f-11e1-ac36-0002a5d5c51b";
+
+
+const b64toHexString = (base64) => {
+  const buffer = Buffer.from(base64, "base64");
+  return Array.from(buffer)
+    .map((byte) => byte.toString(16).padStart(2, "0").toUpperCase())
+    .join("-");
+};
+
+const hexToB64 = (hex) => {
+  const cleanHex = hex.replace(/[^0-9a-fA-F]/g, "");
+
+  const bytes = cleanHex.match(/.{1,2}/g).map((byte) => {
+    return parseInt(byte, 16);
+  });
+
+  return fromByteArray(Uint8Array.from(bytes));
+};
 
 export function BLE() {
   const [connectedDeviceId, setConnectedDeviceId] = useState(null);
   const [conectado, setConectado] = useState(false);
   const [ledState, setLedState] = useState(false);
-  const [angulo, setAngulo] = useState(0);
+  const [angulo, setAngulo] = useState("0");
   const [deviceID, setDeviceID] = useState(null);
 
-  // Permissões BLE
+ 
   const verificarPermissaoBLE = async () => {
     try {
       if (Platform.OS === "android") {
@@ -39,7 +59,7 @@ export function BLE() {
 
         const result = await requestMultiple(perms);
         const granted = Object.values(result).every(
-          (v) => v === RESULTS.GRANTED
+          (v) => v === RESULTS.GRANTED,
         );
         if (!granted) console.warn("Permissões BLE negadas:", result);
         return granted;
@@ -49,7 +69,7 @@ export function BLE() {
           PERMISSIONS.IOS.LOCATION_WHEN_IN_USE,
         ]);
         const granted = Object.values(result).every(
-          (v) => v === RESULTS.GRANTED
+          (v) => v === RESULTS.GRANTED,
         );
         return granted;
       }
@@ -59,7 +79,7 @@ export function BLE() {
     }
   };
 
-  // Observa estado do BLE (ligado/desligado no sistema)
+
   useEffect(() => {
     const sub = manager.onStateChange((state) => {
       console.log("onStateChange:", state);
@@ -67,75 +87,121 @@ export function BLE() {
     return () => sub.remove();
   }, []);
 
-  // Ler characteristic
-  const readCharacteristic = async (deviceIdParam) => {
+
+
+  const monitorAngleCharacteristic = async (deviceIdParam) => {
     const id = deviceIdParam ?? connectedDeviceId ?? deviceID;
+
     if (!id) {
-      console.warn("Sem deviceId para leitura.");
+      console.warn("Sem deviceId para monitorar.");
       return;
     }
-    try {
-      const readData = await manager.readCharacteristicForDevice(
-        id,
-        serviceUUID,
-        characteristicUUID
-      );
-      const rawValue = readData.value; // base64
-      const buffer = Buffer.from(rawValue, "base64");
-      const valor = buffer.readUInt16BE(0);
-      console.log("Valor Recebido:", valor);
-      setAngulo(valor);
-    } catch (error) {
-      console.log("Erro ao ler dado do BLE:", error);
-    }
+
+    manager.monitorCharacteristicForDevice(
+      id,
+      serviceUUID,
+      characteristicUUID,
+      (error, characteristic) => {
+        if (error) {
+          console.log("Erro no notify:", error);
+          return;
+        }
+
+        if (!characteristic?.value) {
+          console.warn("Characteristic sem valor.");
+          return;
+        }
+
+        const hexValue = b64toHexString(characteristic.value);
+
+        console.log("HEX recebido via NOTIFY:", hexValue);
+
+        const buffer = Buffer.from(characteristic.value, "base64");
+        const valor = buffer.readUInt16LE(10);
+        console.log("Valor final (ângulo):", valor);
+        setAngulo(valor);
+      },
+    );
   };
 
-  // Escrever LED ON/OFF
-  const ligarLed = async (on, deviceIdParam) => {
+  const calibracao = async (deviceIdParam) => {
     const id = deviceIdParam ?? connectedDeviceId ?? deviceID;
     if (!id) {
       console.warn("Sem deviceId para escrita.");
       return;
     }
-    const valueB64 = toB64(on ? 0 : 1);
+
+    const valorpreset = hexToB64("200000000200");
+
     try {
-      console.log("Base64 enviado:", valueB64);
+      console.log("Base64 enviado:", valorpreset);
+
       await manager.writeCharacteristicWithoutResponseForDevice(
         id,
         writeUUID,
         characteristicwriteUUID,
-        valueB64
+        valorpreset,
       );
+    } catch (error) {
+      console.log("Erro ao escrever dado do BLE:", error);
+    }
+  };
+
+  const ligarLed = async (deviceIdParam) => {
+    const id = deviceIdParam ?? connectedDeviceId ?? deviceID;
+
+    if (!id) {
+      console.warn("Sem deviceId para escrita.");
+      return;
+    }
+
+    const valueB64 = hexToB64("200000000100");
+
+    try {
+      console.log("Base64 enviado:", valueB64);
+
+      await manager.writeCharacteristicWithoutResponseForDevice(
+        id,
+        writeUUID,
+        characteristicwriteUUID,
+        valueB64,
+      );
+
       setLedState(true);
-      console.log("LED", on ? "DESLIGADO" : "LIGADO");
+      console.log("LED LIGADO");
     } catch (error) {
       console.log("Erro ao escrever dado do BLE:", error);
     }
   };
 
-  const desligarLed = async (on, deviceIdParam) => {
+  const desligarLed = async (deviceIdParam) => {
     const id = deviceIdParam ?? connectedDeviceId ?? deviceID;
+
     if (!id) {
       console.warn("Sem deviceId para escrita.");
       return;
     }
-    const valueB64 = toB64(on ? 1 : 0);
+
+    const valueB64 = hexToB64("200000000000");
+
     try {
       console.log("Base64 enviado:", valueB64);
+
       await manager.writeCharacteristicWithoutResponseForDevice(
         id,
         writeUUID,
         characteristicwriteUUID,
-        valueB64
+        valueB64,
       );
+
       setLedState(false);
-      console.log("LED", on ? "LIGADO" : "DESLIGADO");
+      console.log("LED DESLIGADO");
     } catch (error) {
       console.log("Erro ao escrever dado do BLE:", error);
     }
   };
 
-  // Conectar recebendo o id
+
   const connect = async (deviceId) => {
     try {
       if (!deviceId) {
@@ -149,7 +215,7 @@ export function BLE() {
       });
       console.log(
         "Connected to device:",
-        connectedDevice.name || connectedDevice.id
+        connectedDevice.name || connectedDevice.id,
       );
 
       setConnectedDeviceId(connectedDevice.id);
@@ -158,19 +224,25 @@ export function BLE() {
       await connectedDevice.discoverAllServicesAndCharacteristics();
 
       const services = await connectedDevice.services();
-      console.log("Serviços:", services.map((s) => s.uuid));
+      console.log(
+        "Serviços:",
+        services.map((s) => s.uuid),
+      );
       for (const s of services) {
         const chars = await connectedDevice.characteristicsForService(s.uuid);
-        console.log(`Chars de ${s.uuid}:`, chars.map((c) => c.uuid));
+        console.log(
+          `Chars de ${s.uuid}:`,
+          chars.map((c) => c.uuid),
+        );
       }
 
-      await readCharacteristic(connectedDevice.id);
+      await monitorAngleCharacteristic(connectedDevice.id);
     } catch (error) {
       console.error("Erro durante a conexão:", error);
     }
   };
 
-  // Scan
+
   const scan = async () => {
     console.log("Iniciando scan...");
     manager.startDeviceScan(null, null, async (error, device) => {
@@ -193,13 +265,13 @@ export function BLE() {
       }
     });
 
-    // Segurança: parar o scan após 10s
+
     setTimeout(() => {
       manager.stopDeviceScan();
     }, 10000);
   };
 
-  // Conectar (fluxo completo)
+
   const conectar = async () => {
     const ok = await verificarPermissaoBLE();
     if (!ok) {
@@ -209,7 +281,7 @@ export function BLE() {
     await scan();
   };
 
-  // Desconectar
+
   const desconectar = async (deviceIdArg) => {
     const deviceIdToDisconnect = deviceIdArg ?? connectedDeviceId ?? deviceID;
     if (!deviceIdToDisconnect) {
@@ -223,11 +295,14 @@ export function BLE() {
       setConnectedDeviceId(null);
       console.log(`Device ${deviceIdToDisconnect} disconnected successfully.`);
     } catch (error) {
-      console.error(`Error disconnecting device ${deviceIdToDisconnect}:`, error);
+      console.error(
+        `Error disconnecting device ${deviceIdToDisconnect}:`,
+        error,
+      );
     }
   };
 
-  // Handlers que a tela vai usar
+
   const handlePressConectar = () => {
     conectado ? desconectar() : conectar();
   };
@@ -237,15 +312,16 @@ export function BLE() {
   };
 
   return {
-    // estados
+  
     angulo,
     conectado,
     ledState,
 
-    // ações
+
     conectar,
     desconectar,
-    readCharacteristic,
+    monitorAngleCharacteristic,
+    calibracao,
     handlePressConectar,
     handleLed,
   };
