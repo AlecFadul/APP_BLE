@@ -1,10 +1,5 @@
 import React from "react";
-import {
-  View,
-  Text,
-  Image,
-  TouchableOpacity,
-} from "react-native";
+import { View, Text, Image, TouchableOpacity } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BLE } from "../bluetooth/ble";
 import { telaStyles as styles } from "../styles/telaInicial";
@@ -16,7 +11,7 @@ export default function Tela() {
     ledState,
     handlePressConectar,
     handleLed,
-    readCharacteristic,
+    calibracao,
   } = BLE();
 
   return (
@@ -72,11 +67,11 @@ export default function Tela() {
 
       <View style={styles.footer}>
         <TouchableOpacity
-          onPress={() => readCharacteristic()}
+          onPress={() => calibracao()}
           style={[styles.botao, { backgroundColor: "#ffe100ff" }]}
         >
           <Text style={[styles.textoBotao, { color: "#3e4095" }]}>
-            Ler Valor BLE
+            Calibração
           </Text>
         </TouchableOpacity>
       </View>
